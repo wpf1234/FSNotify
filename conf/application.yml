@@ -6,20 +6,22 @@ app:
     db: 36    #test
     pool: 10
     set_key: "{syslogAvailable}"
+    get_key: "{ip_swc}swc:"
   switch:
     path: /var/lib/tftpboot
   log:
     path: ./log/
     file: log
   kafka:
-    topic: opsWarningTest
+#    topic: opsWarningTest
+    topic: switchlog
     broker: cdh-slave01:9092,cdh-slave02:9092,cdh-slave03:9092
     key: switch_log_alarm
   mysql:
-    user: test
-    pwd: 5ikXhw3G273PgeUWoUSYlw==
-    host: 10.2.14.64:3306
-    #user: devops
-    #pwd: JewfUBLAB3wD/aSyAuoyPA==
-    #host: 10.2.10.120:3306
+#    user: test
+#    pwd: 5ikXhw3G273PgeUWoUSYlw==
+#    host: 10.2.14.64:3306
+    user: devops
+    pwd: JewfUBLAB3wD/aSyAuoyPA==
+    host: 10.2.10.120:3306
     db: aiops

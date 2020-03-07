@@ -7,6 +7,7 @@ type RedisConf struct {
 	DB       int    `json:"db"`
 	Pool     int    `json:"pool"`
 	SetKey   string `json:"set_key"`
+	GetKey   string `json:"get_key"`
 }
 
 type LogConf struct {

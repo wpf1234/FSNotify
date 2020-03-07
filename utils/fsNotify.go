@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
+	"io/ioutil"
 	"myCommon/common/kafka"
 	"myCommon/common/myredis"
 	"myCommon/common/utils"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -35,7 +37,6 @@ import (
 		logging server 10.2.13.35
 */
 const (
-	category     = 1
 	level        = 3
 	mistakeEvent = 22
 	mStr1        = "switchport access vlan"
@@ -49,111 +50,12 @@ const (
 	iosTerm3  = "logging host 10.2.13.36 transport udp port 5140"
 	nxosTerm1 = "logging timestamp milliseconds"
 	nxosTerm2 = "logging server 10.2.13.35"
-	url       = "10.2.14.48:8080/v2/backup?url=http://network.gree.com"
+	url       = "http://10.2.15.54:18081/v2/backup?url=http://network.gree.com"
+
+	authVlan="%PORT_AUTH_VLAN_INVALID"
 )
 
 func MistakeAlarm(dir string) {
-	//var host, port, version, vlan1, vlan2 string
-	//var alarm models.Warning
-	//mp := make(map[string][]string, 0)
-	//ip := info[0].(models.FileInfo).SwitchIp
-	//for _, v := range info {
-	//	var lastTime string
-	//	//t := v.(models.FileInfo).ModTime
-	//	//var id int
-	//	db := initialize.DB.Raw("select last_time from switch_log_record "+
-	//		"where switch_ip=?", ip)
-	//	db.Row().Scan(&lastTime)
-	//	if v.(models.FileInfo).ModTime > lastTime {
-	//		db = initialize.DB.Exec("update switch_log_record set last_time=? where switch_ip=?",
-	//			v.(models.FileInfo).ModTime, ip)
-	//		if err := db.Error; err != nil {
-	//			log.Error("更新失败: ", err)
-	//			return
-	//		}
-	//		log.Info("Update: ", ip, "----->", v.(models.FileInfo).ModTime)
-	//		file, err := os.Open(v.(models.FileInfo).File)
-	//		if err != nil {
-	//			log.Error("打开文件失败: ", err)
-	//			return
-	//		}
-	//		scanner := bufio.NewScanner(file)
-	//		for scanner.Scan() {
-	//			var vlans []string
-	//			line := scanner.Text()
-	//			switch {
-	//			case strings.Contains(line, "version"):
-	//				str := strings.Split(line, " ")
-	//				version = str[len(str)-1]
-	//				break
-	//			case strings.Contains(line, mStr1):
-	//				str := strings.Split(line, " ")
-	//				vlan1 = str[len(str)-1]
-	//
-	//				break
-	//			case strings.Contains(line, mStr2):
-	//				str := strings.Split(line, " ")
-	//				vlan2 = str[len(str)-1]
-	//
-	//				break
-	//			case strings.Contains(line, "hostname"):
-	//				str := strings.Split(line, " ")
-	//				host = str[len(str)-1]
-	//				break
-	//			case strings.Contains(line, "GigabitEthernet"):
-	//				str := strings.Split(line, " ")
-	//				port = str[len(str)-1]
-	//
-	//				break
-	//			default:
-	//				break
-	//			}
-	//			vlans = append(vlans, vlan1)
-	//			vlans = append(vlans, vlan2)
-	//			mp[port] = vlans
-	//			//if vlan1 != vlan2 && vlan2 != "" {
-	//
-	//			//}
-	//		}
-	//
-	//		for k, vv := range mp {
-	//			if k != "" && vv[1] != "" && vv[0] != vv[1] {
-	//				// 告警
-	//				tm := time.Now().UTC().UnixNano() / 1e6
-	//				title := "配置错漏告警"
-	//				msg := fmt.Sprintf("交换机 %s(%s):%s: 配置文件中端口的配置信息错漏 (%s)",
-	//					host, ip, v.(models.FileInfo).Name, extra)
-	//				origin := fmt.Sprintf("交换机 %s(%s):%s 的配置文件中(%s)端口准入认证配置的vlan:%s和access允许通过的vlan:%s不一致 (%s)",
-	//					host, ip, v.(models.FileInfo).Name, k, vv[0], vv[1], extra)
-	//				alarm.Category = category
-	//				alarm.Level = level
-	//				alarm.Tm = tm
-	//				alarm.Ip = ip
-	//				alarm.Host = host
-	//				alarm.Event = mistakeEvent
-	//				alarm.Title = title
-	//				alarm.Msg = msg
-	//				alarm.Origin = origin
-	//				alarm.Ext = models.Ext{
-	//					Address:          ip,
-	//					Port:             k,
-	//					SoftwareCategory: version,
-	//				}
-	//
-	//				js, err := json.Marshal(alarm)
-	//				if err != nil {
-	//					log.Error("数据转换失败: ", err)
-	//					return
-	//				}
-	//
-	//				fmt.Println(title)
-	//				kafka.SyncProducer(initialize.KC.Broker, initialize.KC.Topic, initialize.KC.Key, string(js))
-	//
-	//			}
-	//		}
-	//	}
-	//
-	//}
 	log.Info("Begin listening......")
 	watch, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -189,7 +91,7 @@ LOOP:
 					watch.Add(ev.Name)
 				} else {
 					var switchIp, host, port, vlan1, vlan2 string
-					var alarm models.Warning
+
 					syslog := make(map[string]bool, 0)
 					strs := strings.Split(ev.Name, "/")
 					for _, v := range strs {
@@ -201,7 +103,8 @@ LOOP:
 					fmt.Println("Switch IP: ", switchIp)
 					key := basic.RC.SetKey + ":" + switchIp
 					fileName := strs[len(strs)-1]
-					tm := f.ModTime().UnixNano() / 1e6
+					//tm := f.ModTime().UnixNano() / 1e6
+					tm:=f.ModTime()
 					mTime := f.ModTime().Format(basic.TimeStr)
 
 					// 1.更新最新的文件的产生时间
@@ -220,40 +123,45 @@ LOOP:
 							fmt.Println("[update]Rows affected: ", db.RowsAffected)
 						}
 					} else {
-						db = basic.DB.Exec("insert into switch_log_record set last_time=? and switch_ip=?",
+						db = basic.DB.Exec("insert into switch_log_record set last_time=? ,switch_ip=?",
 							mTime, switchIp)
+						if err:=db.Error;err!=nil{
+							log.Error("新增数据失败: ",err)
+							goto LOOP
+						}
 						fmt.Println("[insert]Rows affected: ", db.RowsAffected)
 					}
 
 					// 2.将产生的文件上传到HDFS
-					//var name string
-					//if strings.Contains(ev.Name, "network") {
-					//	str := strings.Split(ev.Name, "network")
-					//	name = str[1]
-					//} else if strings.Contains(ev.Name, "support") {
-					//	str := strings.Split(ev.Name, "support")
-					//	name = "/support" + str[1]
-					//}
-					//uri := url + name
-					//request, err := http.NewRequest("GET", uri, strings.NewReader(""))
-					//if err != nil {
-					//	log.Error("Request failed: ", err)
-					//	return
-					//}
-					//request.Header.Add("Content-Type", "application/json")
-					//
-					//client := &http.Client{}
-					//response, err := client.Do(request)
-					//if err != nil {
-					//	log.Error("Client do failed: ", err)
-					//	return
-					//}
-					//res, err := ioutil.ReadAll(response.Body)
-					//if err != nil {
-					//	log.Error("Get body failed: ", err)
-					//	return
-					//}
-					//log.Info("Response body: ", string(res))
+					var name string
+					if strings.Contains(ev.Name, "network") {
+						str := strings.Split(ev.Name, "network")
+						name = str[1]
+					} else if strings.Contains(ev.Name, "support") {
+						str := strings.Split(ev.Name, "support")
+						name = "/support" + str[1]
+					}
+					uri := url + name
+					request, err := http.NewRequest("GET", uri, strings.NewReader(""))
+					if err != nil {
+						log.Error("Request failed: ", err)
+						return
+					}
+					request.Header.Add("Content-Type", "application/json")
+
+					client := &http.Client{}
+					response, err := client.Do(request)
+
+					if err != nil {
+						log.Error("Client do failed: ", err)
+						return
+					}
+					res, err := ioutil.ReadAll(response.Body)
+					if err != nil {
+						log.Error("Get body failed: ", err)
+						return
+					}
+					log.Info("Response body: ", string(res))
 
 					// 3.判断是否有配置错漏，发送告警，存入Redis
 					time.Sleep(200 * time.Millisecond)
@@ -324,67 +232,6 @@ LOOP:
 						if strings.Contains(line, nxosTerm2) {
 							syslog[line] = true
 						}
-						//switch {
-						////case strings.Contains(line, "version"):
-						////	str := strings.Split(line, " ")
-						////	version = str[len(str)-1]
-						////	break
-						//case strings.Contains(line, "hostname"):
-						//	str := strings.Split(line, " ")
-						//	host = str[len(str)-1]
-						//	break
-						//case strings.Contains(line, "interface GigabitEthernet"):
-						//	str := strings.Split(line, " ")
-						//	port = str[len(str)-1]
-						//	break
-						//case strings.Contains(line, "switchport access vlan"):
-						//	str := strings.Split(line, " ")
-						//	vlan1 = str[len(str)-1]
-						//	vlan["vlan1"]=vlan1
-						//	mp[port]=vlan
-						//	break
-						//case strings.Contains(line, "authentication event server dead action reinitialize vlan"):
-						//	str := strings.Split(line, " ")
-						//	vlan2 = str[len(str)-1]
-						//	vlan["vlan2"]=vlan2
-						//	mp[port]=vlan
-						//
-						//	break
-						//
-						//case strings.Contains(line, "logging origin-id string"):
-						//	str := strings.Split(line, " ")
-						//	ts := host + "(" + switchIp + ")"
-						//	fmt.Println("Target: ", ts)
-						//	if str[len(str)-1] == ts {
-						//		syslog[line] = true
-						//	} else {
-						//		syslog[line] = false
-						//	}
-						//	break
-						//case line == term1:
-						//	syslog[line] = true
-						//	break
-						//case line == term2:
-						//	syslog[line] = true
-						//	break
-						//case line == iosTerm1:
-						//	syslog[line] = true
-						//	break
-						//case strings.Contains(line, iosTerm2):
-						//	syslog[line] = true
-						//	break
-						//case line == iosTerm3:
-						//	syslog[line] = true
-						//	break
-						//case line == nxosTerm1:
-						//	syslog[line] = true
-						//	break
-						//case strings.Contains(line, nxosTerm2):
-						//	syslog[line] = true
-						//	break
-						//default:
-						//	break
-						//}
 						for k, v := range mp {
 							if v != nil {
 								var sv models.SwitchVlan
@@ -407,8 +254,8 @@ LOOP:
 									for k2, vv := range v2 {
 										if k1 == "vlan1" && k2 == "vlan2" && v != vv {
 											sw.Port = port1
-											sw.Vlan1, _ = strconv.Atoi(v)
-											sw.Vlan2, _ = strconv.Atoi(vv)
+											sw.AccessVlan, _ = strconv.Atoi(v)
+											sw.AuthVlan, _ = strconv.Atoi(vv)
 											switchWarm = append(switchWarm, sw)
 										}
 									}
@@ -434,26 +281,66 @@ LOOP:
 					//}
 					//fmt.Println(switchWarm)
 					if len(switchWarm) != 0 {
-						alarm.Tm = tm
-						alarm.Title = "配置错漏告警"
-						alarm.Category = category
-						alarm.Level = level
-						alarm.Ip = switchIp
-						alarm.Host = host
-						alarm.Event = mistakeEvent
-						alarm.Msg = fmt.Sprintf("交换机 %s(%s):%s: 配置文件中端口的配置信息错漏 (%s)",
-							host, switchIp, fileName, extra)
-						alarm.Origin = ""
-						//alarm.Origin = origin+" "+extra
-						alarm.Ext = models.Ext{ConfVlans: switchWarm}
-						js, err := json.Marshal(alarm)
-						if err != nil {
-							log.Error("数据转换失败: ", err)
-							return
+						var ports,content,topic string
+						for _,v:=range switchWarm{
+							ports=ports+" "+v.Port
 						}
-						// 发送错误告警
-						fmt.Println(alarm.Title)
-						kafka.SyncProducer(basic.KC.Broker, basic.KC.Topic, basic.KC.Key, string(js))
+						var ext models.Ext
+						ext.ConfVlans=switchWarm
+						js,err:=json.Marshal(ext)
+						//fmt.Println(string(js))
+						if err!=nil{
+							log.Error("数据转换失败: ",err)
+							goto LOOP
+						}
+						hostIp:=host+"("+switchIp+")"
+						getKey:=basic.RC.GetKey+switchIp
+						r,err:=myredis.RedisClient.Get(getKey).Result()
+						if err!=nil{
+							log.Error("[Redis]Get system type error: ",err)
+							goto LOOP
+						}
+						sys,_:=strconv.Atoi(r)
+						if sys == 0 {
+							log.Info("System type is unknown!")
+							goto LOOP
+						}else if sys == 1{
+							// NX-OS
+							topic=basic.KC.Topic
+							content=fmt.Sprintf("<186>%s:%s:%s:交换机 %s 的配置文件 %s 中 %s " +
+								"端口准入认证配置的vlan和access允许通过的vlan不一致 %s - from 智能运维平台",
+								hostIp,tm,authVlan,hostIp,fileName,ports,string(js))
+						}else if sys == 2{
+							// IOS
+							topic=basic.KC.Topic+"_ios"
+							content=fmt.Sprintf("<189>%s:%s:%s:交换机 %s 的配置文件 %s 中 %s " +
+								"端口准入认证配置的vlan和access允许通过的vlan不一致 %s - from 智能运维平台",
+								hostIp,tm,authVlan,hostIp,fileName,ports,string(js))
+						}
+
+						//var alarm models.Warning
+						//alarm.Tm = tm
+						//alarm.Title = "配置错漏告警"
+						//db:=basic.DB.Raw("select switch_category from net_switch where ip=?",switchIp)
+						//db.Row().Scan(&alarm.Category)
+						////alarm.Category = category
+						//alarm.Level = level
+						//alarm.Ip = switchIp
+						//alarm.Host = host
+						//alarm.Event = mistakeEvent
+						//alarm.Msg = fmt.Sprintf("交换机 %s(%s):%s: 配置文件中端口的配置信息错漏 (%s)",
+						//	host, switchIp, fileName, extra)
+						//alarm.Origin = ""
+						////alarm.Origin = origin+" "+extra
+						//alarm.Ext = models.Ext{ConfVlans: switchWarm}
+						//js, err := json.Marshal(alarm)
+						//if err != nil {
+						//	log.Error("数据转换失败: ", err)
+						//	return
+						//}
+						// 发送错误告警 omitempty
+						fmt.Println("配置错漏告警")
+						kafka.SyncProducer(basic.KC.Broker, topic, basic.KC.Key, content)
 					}
 
 					for i := 0; i < len(data); i++ {

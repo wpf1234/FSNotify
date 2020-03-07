@@ -1,9 +1,9 @@
 package models
 
 type SwitchWarn struct {
-	Port  string `json:"port"`
-	Vlan1 int    `json:"vlan1"`
-	Vlan2 int    `json:"vlan2"`
+	Port       string `json:"port"`
+	AccessVlan int    `json:"accessVlan"`
+	AuthVlan   int    `json:"authVlan"`
 }
 
 type Warning struct {
